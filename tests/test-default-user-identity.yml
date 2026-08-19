@@ -1,0 +1,43 @@
+name: Test rebase with default user identity
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Configure git global settings
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      - id: rebase
+        uses: .
+        # Use default user-email and user-name (github-actions[bot])
+
+      - name: Assert result output is set
+        env:
+          ACTUAL: ${{ steps.rebase.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: result output should not be empty"
+            exit 1
+          fi
+          echo "PASS: result is '$ACTUAL'"
+
+      - name: Assert result is a known value
+        env:
+          ACTUAL: ${{ steps.rebase.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          case "$ACTUAL" in
+            upToDate|success|conflicts|error)
+              echo "PASS: result '$ACTUAL' is a valid value"
+              ;;
+            *)
+              echo "FAIL: '$ACTUAL' is not a valid result value"
+              exit 1
+              ;;
+          esac

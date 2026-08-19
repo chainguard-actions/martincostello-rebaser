@@ -1,0 +1,33 @@
+name: Test branch input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - name: Ensure main branch exists locally
+        run: |
+          git fetch origin main:main || true
+      - id: action
+        uses: .
+        with:
+          branch: 'main'
+          user-email: 'github-actions[bot]@users.noreply.github.com'
+          user-name: 'github-actions[bot]'
+      - name: Assert result is a valid value
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          case "$ACTUAL" in
+            upToDate|success|conflicts|error)
+              echo "PASS: result is a valid value '$ACTUAL'"
+              ;;
+            *)
+              echo "FAIL: unexpected result '$ACTUAL'"
+              exit 1
+              ;;
+          esac

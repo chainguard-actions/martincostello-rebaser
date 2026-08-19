@@ -1,0 +1,38 @@
+name: Test custom repository path
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up a separate git repository
+        run: |
+          mkdir -p /tmp/test-repo
+          cd /tmp/test-repo
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo "hello" > README.md
+          git add README.md
+          git commit -m "Initial commit"
+      - id: action
+        uses: .
+        with:
+          repository: /tmp/test-repo
+          user-email: 'test@example.com'
+          user-name: 'Test User'
+      - name: Assert result is a valid value
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          case "$ACTUAL" in
+            upToDate|success|conflicts|error)
+              echo "PASS: result is a valid value '$ACTUAL'"
+              ;;
+            *)
+              echo "FAIL: unexpected result '$ACTUAL'"
+              exit 1
+              ;;
+          esac

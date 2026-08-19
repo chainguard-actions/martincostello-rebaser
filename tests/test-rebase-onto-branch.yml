@@ -1,0 +1,51 @@
+name: Test rebase onto specific branch
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up a test git repository with diverged branches
+        run: |
+          mkdir -p /tmp/test-repo
+          cd /tmp/test-repo
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+          # Create initial commit on main
+          echo "initial" > file.txt
+          git add file.txt
+          git commit -m "Initial commit"
+          git checkout -b main
+          git checkout -b feature
+
+          # Add a commit to main that feature doesn't have
+          git checkout main
+          echo "main change" >> file.txt
+          git add file.txt
+          git commit -m "Main branch commit"
+
+          # Switch to feature branch (behind main)
+          git checkout feature
+
+      - id: rebase
+        uses: .
+        with:
+          branch: "main"
+          repository: "/tmp/test-repo"
+          user-email: "test@example.com"
+          user-name: "Test User"
+
+      - name: Assert result is success or upToDate
+        env:
+          ACTUAL: ${{ steps.rebase.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "success" ] && [ "$ACTUAL" != "upToDate" ]; then
+            echo "FAIL: expected 'success' or 'upToDate', got '$ACTUAL'"
+            exit 1
+          fi
+          echo "PASS"
