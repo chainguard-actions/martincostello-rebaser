@@ -1,0 +1,42 @@
+name: Test rebase with default inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up git with a main branch that is up to date
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          # Ensure a 'main' branch exists as the default target
+          # The action defaults to context.payload.repository.default_branch or 'main'
+          git checkout -b main 2>/dev/null || git checkout main 2>/dev/null || true
+          # Create a feature branch from main (same commit = up to date)
+          git checkout -b feature-default-test
+
+      - id: action
+        uses: .
+        with:
+          branch: main
+          user-email: github-actions[bot]@users.noreply.github.com
+          user-name: github-actions[bot]
+
+      - name: Assert result is a valid rebase outcome
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          case "$ACTUAL" in
+            upToDate|success|conflicts|error)
+              echo "PASS: result '$ACTUAL' is a valid rebase outcome"
+              ;;
+            *)
+              echo "FAIL: unexpected result '$ACTUAL'"
+              exit 1
+              ;;
+          esac

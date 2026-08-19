@@ -1,0 +1,31 @@
+name: Test rebase with explicit branch
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create and switch to a test branch
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git checkout -b test-feature-branch
+      - id: action
+        uses: .
+        with:
+          branch: act-harness
+          user-email: 'github-actions[bot]@users.noreply.github.com'
+          user-name: 'github-actions[bot]'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Assert result is upToDate or success
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "upToDate" ] && [ "$ACTUAL" != "success" ]; then
+            echo "FAIL: expected 'upToDate' or 'success', got '$ACTUAL'"
+            exit 1
+          fi
+          echo "PASS"

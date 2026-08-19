@@ -1,0 +1,38 @@
+name: Test rebase up-to-date scenario
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up git repo with up-to-date branch
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          # Create a base branch from current HEAD
+          git checkout -b base-branch
+          # Create a feature branch from the same point
+          git checkout -b feature-branch
+          # feature-branch is already up to date with base-branch (same commit)
+
+      - id: action
+        uses: .
+        with:
+          branch: base-branch
+          user-email: test@example.com
+          user-name: Test User
+
+      - name: Assert result is upToDate
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "upToDate" ]; then
+            echo "FAIL: expected 'upToDate' but got '$ACTUAL'"
+            exit 1
+          fi
+          echo "PASS"

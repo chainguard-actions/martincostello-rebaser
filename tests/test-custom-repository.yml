@@ -1,0 +1,57 @@
+name: Test rebase with custom repository path
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up a separate git repository
+        run: |
+          REPO_PATH="$GITHUB_WORKSPACE/test-repo"
+          mkdir -p "$REPO_PATH"
+          cd "$REPO_PATH"
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+          # Create initial commit
+          echo "initial content" > README.md
+          git add README.md
+          git commit -m "Initial commit"
+
+          # Create base-branch with an extra commit
+          git checkout -b base-branch
+          echo "base content" > base-file.txt
+          git add base-file.txt
+          git commit -m "Add base file"
+
+          # Go back to initial commit and create feature-branch
+          git checkout HEAD~1
+          git checkout -b feature-branch
+          echo "feature content" > feature-file.txt
+          git add feature-file.txt
+          git commit -m "Add feature file"
+          # feature-branch can be cleanly rebased onto base-branch
+
+      - id: action
+        uses: .
+        with:
+          repository: ${{ github.workspace }}/test-repo
+          branch: base-branch
+          user-email: test@example.com
+          user-name: Test User
+
+      - name: Assert result is success
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "success" ]; then
+            echo "FAIL: expected 'success' but got '$ACTUAL'"
+            exit 1
+          fi
+          echo "PASS"
