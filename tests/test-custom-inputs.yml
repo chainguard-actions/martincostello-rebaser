@@ -1,0 +1,74 @@
+name: Test rebase custom inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up git repo with custom user settings
+        run: |
+          git config --global --add safe.directory '*'
+          REPO="$GITHUB_WORKSPACE/_test-repo-custom"
+          mkdir -p "$REPO"
+          cd "$REPO"
+          git init
+          git symbolic-ref HEAD refs/heads/main
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+          # Create initial commit on main
+          echo "initial" > file.txt
+          git add file.txt
+          git commit -m "Initial commit"
+
+          # Create a feature branch from main
+          git checkout -b feature
+
+          # Add a commit on feature branch (different file, no conflict)
+          echo "feature content" > feature.txt
+          git add feature.txt
+          git commit -m "Feature commit"
+
+          # Go back to main and add a commit (different file, no conflict)
+          git checkout main
+          echo "main update" > main-update.txt
+          git add main-update.txt
+          git commit -m "Main update"
+
+          # Switch back to feature branch — it is behind main now
+          git checkout feature
+
+      - id: action
+        uses: .
+        with:
+          repository: ${{ github.workspace }}/_test-repo-custom
+          branch: main
+          user-email: custom-bot@example.com
+          user-name: Custom Bot
+
+      - name: Assert result is success with custom inputs
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "success" ]; then
+            echo "FAIL: expected 'success' but got '$ACTUAL'"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert custom user was used in rebase commit
+        run: |
+          REPO="$GITHUB_WORKSPACE/_test-repo-custom"
+          cd "$REPO"
+          # During rebase, the committer identity is set by the rebaser config
+          # Check the committer email of the most recent commit
+          COMMITTER=$(git log --format="%ce" -1)
+          echo "committer email: $COMMITTER"
+          if [ "$COMMITTER" != "custom-bot@example.com" ]; then
+            echo "FAIL: expected committer email 'custom-bot@example.com' but got '$COMMITTER'"
+            exit 1
+          fi
+          echo "PASS"

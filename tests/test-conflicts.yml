@@ -1,0 +1,60 @@
+name: Test rebase conflicts
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up git repo with conflicting changes
+        run: |
+          git config --global --add safe.directory '*'
+          REPO="$GITHUB_WORKSPACE/_test-repo-conflicts"
+          mkdir -p "$REPO"
+          cd "$REPO"
+          git init
+          git symbolic-ref HEAD refs/heads/main
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+          # Create initial commit on main
+          echo "initial content" > shared.txt
+          git add shared.txt
+          git commit -m "Initial commit"
+
+          # Create a feature branch from main
+          git checkout -b feature
+
+          # Modify shared.txt on feature branch
+          echo "feature version of content" > shared.txt
+          git add shared.txt
+          git commit -m "Feature changes to shared file"
+
+          # Go back to main and modify the same file differently
+          git checkout main
+          echo "main version of content" > shared.txt
+          git add shared.txt
+          git commit -m "Main changes to shared file"
+
+          # Switch back to feature branch — rebasing will conflict
+          git checkout feature
+
+      - id: action
+        uses: .
+        with:
+          repository: ${{ github.workspace }}/_test-repo-conflicts
+          branch: main
+          user-email: test@example.com
+          user-name: Test User
+
+      - name: Assert result is conflicts
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "conflicts" ]; then
+            echo "FAIL: expected 'conflicts' but got '$ACTUAL'"
+            exit 1
+          fi
+          echo "PASS"

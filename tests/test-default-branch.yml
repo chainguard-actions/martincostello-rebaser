@@ -1,0 +1,44 @@
+name: Test rebase default branch
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up git repo where feature is already up to date with main
+        run: |
+          git config --global --add safe.directory '*'
+          REPO="$GITHUB_WORKSPACE/_test-repo-default"
+          mkdir -p "$REPO"
+          cd "$REPO"
+          git init
+          git symbolic-ref HEAD refs/heads/main
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+          # Create initial commit on main
+          echo "initial" > file.txt
+          git add file.txt
+          git commit -m "Initial commit"
+
+          # Create a feature branch from main — already up to date
+          git checkout -b feature
+
+      - id: action
+        uses: .
+        with:
+          repository: ${{ github.workspace }}/_test-repo-default
+          branch: main
+
+      - name: Assert result is upToDate when no divergence
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "upToDate" ]; then
+            echo "FAIL: expected 'upToDate' but got '$ACTUAL'"
+            exit 1
+          fi
+          echo "PASS"
