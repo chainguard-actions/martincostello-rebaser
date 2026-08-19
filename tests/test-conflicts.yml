@@ -1,0 +1,58 @@
+name: Test rebase conflicts
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up a separate git repository with conflicting branches
+        run: |
+          REPO_PATH="$GITHUB_WORKSPACE/conflict-repo"
+          mkdir -p "$REPO_PATH"
+          cd "$REPO_PATH"
+
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+          # Create initial commit (common ancestor)
+          echo "original content" > conflict.txt
+          git add conflict.txt
+          git commit -m "Initial commit"
+          git branch -M main
+
+          # Create 'target' branch with a different change to the same file
+          git checkout -b target
+          echo "target branch content" > conflict.txt
+          git add conflict.txt
+          git commit -m "Modify conflict.txt on target"
+
+          # Go back to main and create a 'feature' branch with a conflicting change
+          git checkout main
+          git checkout -b feature
+          echo "feature branch content" > conflict.txt
+          git add conflict.txt
+          git commit -m "Modify conflict.txt on feature"
+
+          # We are now on 'feature' branch; rebasing onto 'target' will conflict
+
+      - id: action
+        uses: .
+        with:
+          branch: target
+          repository: ${{ github.workspace }}/conflict-repo
+          user-email: test@example.com
+          user-name: Test User
+
+      - name: Assert result is conflicts
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "conflicts" ]; then
+            echo "FAIL: expected 'conflicts' but got '$ACTUAL'"
+            exit 1
+          fi
+          echo "PASS"

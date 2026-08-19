@@ -1,0 +1,48 @@
+name: Test successful rebase
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up a git repository needing rebase
+        run: |
+          mkdir -p /tmp/rebase-repo
+          cd /tmp/rebase-repo
+          git init -b main
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          # Create initial commit on main
+          echo "initial" > README.md
+          git add README.md
+          git commit -m "Initial commit"
+          # Create feature branch from this point
+          git checkout -b feature-branch
+          echo "feature" > feature.txt
+          git add feature.txt
+          git commit -m "Add feature"
+          # Go back to main and add a new commit (diverge)
+          git checkout main
+          echo "main update" > main-update.txt
+          git add main-update.txt
+          git commit -m "Update main"
+          # Switch to feature branch so it needs rebasing onto main
+          git checkout feature-branch
+      - id: action
+        uses: .
+        with:
+          repository: '/tmp/rebase-repo'
+          branch: 'main'
+          user-email: 'test@example.com'
+          user-name: 'Test User'
+      - name: Assert result is success or upToDate
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "success" ] && [ "$ACTUAL" != "upToDate" ]; then
+            echo "FAIL: expected 'success' or 'upToDate', got '$ACTUAL'"
+            exit 1
+          fi
+          echo "PASS"

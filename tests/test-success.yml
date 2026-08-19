@@ -1,0 +1,59 @@
+name: Test rebase success
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up a separate git repository with diverged branches
+        run: |
+          REPO_PATH="$GITHUB_WORKSPACE/success-repo"
+          mkdir -p "$REPO_PATH"
+          cd "$REPO_PATH"
+
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+          # Create initial commit on main
+          echo "initial content" > README.md
+          git add README.md
+          git commit -m "Initial commit"
+          git branch -M main
+
+          # Add another commit to main (so main is ahead)
+          echo "main update" > main-update.txt
+          git add main-update.txt
+          git commit -m "Update on main"
+
+          # Create a feature branch from the first commit (one behind main)
+          git checkout -b feature HEAD~1
+
+          # Add a non-conflicting commit on feature
+          echo "feature content" > feature.txt
+          git add feature.txt
+          git commit -m "Add feature"
+
+          # feature is now one commit behind main and one commit ahead
+          # Rebasing feature onto main should succeed with no conflicts
+
+      - id: action
+        uses: .
+        with:
+          branch: main
+          repository: ${{ github.workspace }}/success-repo
+          user-email: test@example.com
+          user-name: Test User
+
+      - name: Assert result is success
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "success" ]; then
+            echo "FAIL: expected 'success' but got '$ACTUAL'"
+            exit 1
+          fi
+          echo "PASS"

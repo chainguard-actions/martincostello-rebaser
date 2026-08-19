@@ -1,0 +1,152 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  FORCE_COLOR: 1
+  # renovate: datasource=github-releases depName=powershell-yaml packageName=cloudbase/powershell-yaml
+  POWERSHELL_YAML_VERSION: '0.4.12'
+  # renovate: datasource=github-releases depName=PSScriptAnalyzer packageName=PowerShell/PSScriptAnalyzer
+  PSSCRIPTANALYZER_VERSION: '1.24.0'
+  # renovate: datasource=github-releases depName=zizmor packageName=zizmorcore/zizmor
+  ZIZMOR_VERSION: '1.12.1'
+
+permissions: {}
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            os-name: macos
+          - os: ubuntu-latest
+            os-name: linux
+          - os: windows-latest
+            os-name: windows
+
+    steps:
+
+    - name: Checkout code
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      with:
+        filter: 'tree:0'
+        persist-credentials: false
+        show-progress: false
+
+    - name: Setup Node
+      uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      with:
+        node-version: '24.x'
+
+    - name: Get npm cache directory
+      id: npm-cache-dir
+      shell: pwsh
+      run: |
+        "dir=$(npm config get cache)" >> ${env:GITHUB_OUTPUT}
+
+    - name: Setup npm cache
+      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      id: npm-cache
+      with:
+        path: ${{ steps.npm-cache-dir.outputs.dir }}
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: ${{ runner.os }}-node-
+
+    - name: Install packages
+      run: npm ci
+
+    - name: Build and Test
+      shell: pwsh
+      run: ./build.ps1
+
+    - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      name: Upload coverage to Codecov
+      with:
+        flags: ${{ matrix.os-name }}
+        token: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Generate SBOM
+      uses: anchore/sbom-action@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
+      if: runner.os == 'Linux'
+      with:
+        artifact-name: rebaser.spdx.json
+        output-file: rebaser.spdx.json
+        path: .
+
+    - name: Attest dist
+      uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+      if: |
+        runner.os == 'Linux' &&
+        github.ref_name == github.event.repository.default_branch
+      with:
+        subject-path: ./dist/**/*.js
+
+  lint:
+    runs-on: ubuntu-latest
+
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+
+    - name: Checkout code
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      with:
+        filter: 'tree:0'
+        persist-credentials: false
+        show-progress: false
+
+    - name: Add actionlint problem matcher
+      run: echo "::add-matcher::.github/actionlint-matcher.json"
+
+    - name: Lint workflows with actionlint
+      uses: docker://rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+      with:
+        args: -color
+
+    - name: Lint workflows with zizmor
+      uses: zizmorcore/zizmor-action@5ca5fc7a4779c5263a3ffa0e1f693009994446d1 # v0.1.2
+      with:
+        persona: pedantic
+        version: ${{ env.ZIZMOR_VERSION }}
+
+    - name: Lint PowerShell in workflows
+      uses: martincostello/lint-actions-powershell@5942e3350ee5bd8f8933cec4e1185d13f0ea688f # v1.0.0
+      with:
+        powershell-yaml-version: ${{ env.POWERSHELL_YAML_VERSION }}
+        psscriptanalyzer-version: ${{ env.PSSCRIPTANALYZER_VERSION }}
+        treat-warnings-as-errors: true
+
+    - name: Lint PowerShell scripts
+      shell: pwsh
+      run: |
+        $settings = @{
+          IncludeDefaultRules = $true
+          Severity = @("Error", "Warning")
+        }
+        $issues = Invoke-ScriptAnalyzer -Path ${env:GITHUB_WORKSPACE} -Recurse -ReportSummary -Settings $settings
+        foreach ($issue in $issues) {
+          $severity = $issue.Severity.ToString()
+          $level = $severity.Contains("Error") ? "error" : $severity.Contains("Warning") ? "warning" : "notice"
+          Write-Output "::${level} file=$($issue.ScriptName),line=$($issue.Line),title=PSScriptAnalyzer::$($issue.Message)"
+        }
+        if ($issues.Count -gt 0) {
+          exit 1
+        }

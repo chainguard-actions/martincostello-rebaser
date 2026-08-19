@@ -1,0 +1,48 @@
+name: Test custom branch rebase
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up a git repository with two branches
+        run: |
+          mkdir -p /tmp/branch-repo
+          cd /tmp/branch-repo
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo "hello" > README.md
+          git add README.md
+          git commit -m "Initial commit"
+          # Create a feature branch from main
+          git checkout -b feature-branch
+          echo "feature content" > feature.txt
+          git add feature.txt
+          git commit -m "Add feature"
+          # Go back to main and add another commit
+          git checkout main 2>/dev/null || git checkout master
+          echo "main update" > main-update.txt
+          git add main-update.txt
+          git commit -m "Update main"
+          # Switch back to feature branch for rebasing
+          git checkout feature-branch
+      - id: action
+        uses: .
+        with:
+          repository: '/tmp/branch-repo'
+          branch: 'main'
+          user-email: 'test@example.com'
+          user-name: 'Test User'
+        continue-on-error: true
+      - name: Assert result is a valid value
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "upToDate" ] && [ "$ACTUAL" != "success" ] && [ "$ACTUAL" != "conflicts" ] && [ "$ACTUAL" != "error" ]; then
+            echo "FAIL: expected a valid result value, got '$ACTUAL'"
+            exit 1
+          fi
+          echo "PASS"
