@@ -1,0 +1,63 @@
+name: Test rebase with custom repository path
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up a separate git repository in a custom subdirectory
+        run: |
+          # Allow git to operate on any directory
+          git config --global --add safe.directory '*'
+
+          # Create a fresh git repo in a custom subdirectory (different from test-repo)
+          mkdir -p "$GITHUB_WORKSPACE/custom-repo"
+          cd "$GITHUB_WORKSPACE/custom-repo"
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+          # Create initial commit on default branch
+          echo "initial content" > initial.txt
+          git add initial.txt
+          git commit -m "Initial commit"
+
+          # Create base-branch with an additional commit
+          git checkout -b base-branch
+          echo "base content" > base.txt
+          git add base.txt
+          git commit -m "Base commit"
+
+          # Create feature-branch from base-branch with another commit
+          # feature-branch is already based on base-branch
+          git checkout -b feature-branch
+          echo "feature content" > feature.txt
+          git add feature.txt
+          git commit -m "Feature commit"
+
+          # Current branch is feature-branch
+          git branch -v
+
+      - id: action
+        uses: .
+        with:
+          repository: ${{ github.workspace }}/custom-repo
+          branch: base-branch
+          user-email: "test@example.com"
+          user-name: "Test User"
+
+      - name: Assert result is upToDate or success
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" = "upToDate" ] || [ "$ACTUAL" = "success" ]; then
+            echo "PASS: result is '$ACTUAL' as expected (custom repo rebase succeeded)"
+          else
+            echo "FAIL: expected 'upToDate' or 'success' but got '$ACTUAL'"
+            exit 1
+          fi

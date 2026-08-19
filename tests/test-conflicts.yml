@@ -1,0 +1,70 @@
+name: Test rebase conflicts scenario
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up a fresh git repo with conflicting branches
+        run: |
+          # Allow git to operate on any directory
+          git config --global --add safe.directory '*'
+
+          # Create a fresh git repo in a subdirectory
+          mkdir -p "$GITHUB_WORKSPACE/test-repo"
+          cd "$GITHUB_WORKSPACE/test-repo"
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+          # Create initial commit on default branch
+          echo "initial content" > initial.txt
+          git add initial.txt
+          git commit -m "Initial commit"
+
+          # Create base-branch with a commit that modifies conflict.txt
+          git checkout -b base-branch
+          echo "base content for conflict" > conflict.txt
+          git add conflict.txt
+          git commit -m "Base commit"
+
+          # Create target-branch from base-branch with a commit that modifies conflict.txt differently
+          git checkout -b target-branch
+          echo "target content - modified differently" > conflict.txt
+          git add conflict.txt
+          git commit -m "Target commit modifies conflict.txt"
+
+          # Go back to base-branch and add a commit that also modifies conflict.txt differently
+          git checkout base-branch
+          echo "feature content - also modified differently" > conflict.txt
+          git add conflict.txt
+          git commit -m "Feature commit modifies conflict.txt"
+
+          # Current branch is base-branch
+          # Rebasing base-branch onto target-branch should produce conflicts in conflict.txt
+          # (plain text file - cannot be auto-resolved)
+          git branch -v
+
+      - id: action
+        uses: .
+        with:
+          repository: ${{ github.workspace }}/test-repo
+          branch: target-branch
+          user-email: "test@example.com"
+          user-name: "Test User"
+
+      - name: Assert result is conflicts
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" = "conflicts" ]; then
+            echo "PASS: result is 'conflicts' as expected"
+          else
+            echo "FAIL: expected 'conflicts' but got '$ACTUAL'"
+            exit 1
+          fi

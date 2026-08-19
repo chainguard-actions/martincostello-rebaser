@@ -1,0 +1,69 @@
+name: Test rebase success scenario
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up a fresh git repo with diverged branches (no conflicts)
+        run: |
+          # Allow git to operate on any directory
+          git config --global --add safe.directory '*'
+
+          # Create a fresh git repo in a subdirectory
+          mkdir -p "$GITHUB_WORKSPACE/test-repo"
+          cd "$GITHUB_WORKSPACE/test-repo"
+          git init
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+          # Create initial commit on default branch
+          echo "initial content" > initial.txt
+          git add initial.txt
+          git commit -m "Initial commit"
+
+          # Create base-branch with an additional commit
+          git checkout -b base-branch
+          echo "base content" > base.txt
+          git add base.txt
+          git commit -m "Base commit"
+
+          # Create target-branch from base-branch with a commit (modifies target.txt)
+          git checkout -b target-branch
+          echo "target content" > target.txt
+          git add target.txt
+          git commit -m "Target commit"
+
+          # Go back to base-branch and add a commit (modifies feature.txt - no conflict)
+          git checkout base-branch
+          echo "feature content" > feature.txt
+          git add feature.txt
+          git commit -m "Feature commit"
+
+          # Current branch is base-branch
+          # Rebasing base-branch onto target-branch should succeed (different files)
+          git branch -v
+
+      - id: action
+        uses: .
+        with:
+          repository: ${{ github.workspace }}/test-repo
+          branch: target-branch
+          user-email: "test@example.com"
+          user-name: "Test User"
+
+      - name: Assert result is success or upToDate
+        env:
+          ACTUAL: ${{ steps.action.outputs.result }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" = "success" ] || [ "$ACTUAL" = "upToDate" ]; then
+            echo "PASS: result is '$ACTUAL' as expected (rebase succeeded)"
+          else
+            echo "FAIL: expected 'success' or 'upToDate' but got '$ACTUAL'"
+            exit 1
+          fi
